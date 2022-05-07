@@ -1,7 +1,8 @@
 package main
 
 import (
-	"bufio"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -9,22 +10,44 @@ import (
 )
 
 type ProcessManager struct {
-	processes   []Process
+	processes   []*Process
 	runningCmds []*exec.Cmd
 	exitChannel chan bool
 }
 
 type Process struct {
+	cfg     ProcessConfig
+	logFile *os.File
+}
+
+type ProcessConfig struct {
 	Name         string `json:"name"`
 	Command      string `json:"command"`
 	Args         string `json:"args"`
 	RestartDelay int    `json:"restart_delay"`
 }
 
-func NewProcessManager(processes []Process) *ProcessManager {
+func NewProcess(processConfig ProcessConfig) *Process {
+	homeDir := os.Getenv("HOME")
+	logDir := fmt.Sprintf("%s/.gopm3", homeDir)
+	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
+		log.Fatal(err)
+	}
+	logFileName := fmt.Sprintf("%s/%s.log", logDir, processConfig.Name)
+	logFile, err := os.Create(logFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &Process{
+		cfg:     processConfig,
+		logFile: logFile,
+	}
+}
+
+func NewProcessManager(processes []*Process) *ProcessManager {
 	return &ProcessManager{
-		processes: processes,
-		exitChannel: make(chan bool, 1),
+		processes:   processes,
+		exitChannel: make(chan bool),
 	}
 }
 
@@ -32,27 +55,17 @@ func (pm3 *ProcessManager) Start() {
 	var wg sync.WaitGroup
 	for _, process := range pm3.processes {
 		wg.Add(1)
-		go func(process Process) {
+		go func(process *Process) {
 			defer wg.Done()
-			log.Printf("Starting processz %s (%s %s)\n", process.Name, process.Command, process.Args)
-			cmd := exec.Command(process.Command, process.Args)
+			log.Printf("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
+			cmd := exec.Command(process.cfg.Command, process.cfg.Args)
 			pm3.runningCmds = append(pm3.runningCmds, cmd)
-			stdout, err := cmd.StderrPipe()
-			if err != nil {
-				log.Println("fail")
-				log.Print(err)
+			writer := io.Writer(process.logFile)
+			cmd.Stdout = writer
+			cmd.Stderr = writer
+			if err := cmd.Run(); err != nil {
+				log.Printf("Process has exited %s: %s", process.cfg.Name, err)
 				return
-			}
-			if err := cmd.Start(); err != nil {
-				log.Println("Failed to start cmd", err)
-				log.Print(err)
-				return
-			}
-			reader := bufio.NewReader(stdout)
-			line, err := reader.ReadString('\n')
-			for err == nil {
-				log.Print(line)
-				line, err = reader.ReadString('\n')
 			}
 		}(process)
 	}
@@ -66,6 +79,12 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 	for _, cmd := range pm3.runningCmds {
 		if err := cmd.Process.Signal(caughtSignal); err != nil {
 			log.Print(err)
+		}
+	}
+	log.Println("Closing all log files")
+	for _, process := range pm3.processes {
+		if err := process.logFile.Close(); err != nil {
+			log.Printf("Log file for %s failed to be closed properly: %s", process.cfg.Name, err)
 		}
 	}
 }

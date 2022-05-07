@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func main() {
+func setupProcesses() []*Process {
 	configFile, err := os.Open("./config.json")
 	if err != nil {
 		log.Fatal(err)
@@ -18,8 +18,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var processes []Process
-	json.Unmarshal(config, &processes)
+	var cfgs []ProcessConfig
+	json.Unmarshal(config, &cfgs)
+	var processes []*Process
+	for _, cfg := range cfgs {
+		process := NewProcess(cfg)
+		processes = append(processes, process)
+	}
+	return processes
+}
+
+func main() {
+	processes := setupProcesses()
 	pm3 := NewProcessManager(processes)
 	log.Println(pm3)
 
