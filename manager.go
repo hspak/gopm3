@@ -43,6 +43,7 @@ func NewProcess(processConfig ProcessConfig, tui *tview.Application) *Process {
 	}
 	textView := tview.NewTextView().
 		SetRegions(true).
+		SetDynamicColors(true).
 		SetChangedFunc(func() {
 			tui.Draw()
 		})
@@ -69,7 +70,7 @@ func (pm3 *ProcessManager) Start() {
 			log.Printf("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
 			cmd := exec.Command(process.cfg.Command, process.cfg.Args)
 			pm3.runningCmds = append(pm3.runningCmds, cmd)
-			writer := io.MultiWriter(process.logFile, process.textView)
+			writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
 			cmd.Stdout = writer
 			cmd.Stderr = writer
 
