@@ -2,14 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
-func setupProcesses() []*Process {
+func setupProcesses(tui *tview.Application) []*Process {
 	configFile, err := os.Open("./config.json")
 	if err != nil {
 		log.Fatal(err)
@@ -22,26 +26,61 @@ func setupProcesses() []*Process {
 	json.Unmarshal(config, &cfgs)
 	var processes []*Process
 	for _, cfg := range cfgs {
-		process := NewProcess(cfg)
+		process := NewProcess(cfg, tui)
 		processes = append(processes, process)
 	}
 	return processes
 }
 
 func main() {
-	processes := setupProcesses()
-	pm3 := NewProcessManager(processes)
-	log.Println(pm3)
+	tui := tview.NewApplication()
+	tui.EnableMouse(true)
+	logPages := tview.NewFlex()
+	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr)")
+	processes := setupProcesses(tui)
 
+	processList := tview.NewList().ShowSecondaryText(false)
+
+	for _, process := range processes {
+		processList.AddItem(process.cfg.Name, "", 0, func() {})
+	}
+
+	processList.SetBorder(true).SetTitle(processes[0].cfg.Name)
+	flex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
+	tui.SetRoot(flex, true)
+
+	pm3 := NewProcessManager(processes)
 	go func() {
 		pm3.Start()
 	}()
 
-	unixSignals := make(chan os.Signal, 1)
-	signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
-	caughtSignal := <-unixSignals
-	log.Printf("Caught signal: %s -- exiting gracefully\n", caughtSignal)
-	pm3.Stop(caughtSignal)
+	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
+		processList.SetTitle(fmt.Sprintf("%s-%d", processName, len(processes)))
+		logPages.Clear()
+		logPages.AddItem(processes[i].textView, 0, 1, true)
+	})
+	logPages.AddItem(processes[0].textView, 0, 1, true)
+
+	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
+			tui.Stop()
+			pm3.Stop(syscall.SIGTERM)
+		}
+		return event
+	})
+
+	go func() {
+		unixSignals := make(chan os.Signal, 1)
+		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
+		caughtSignal := <-unixSignals
+		log.Printf("Caught signal: %s -- exiting gracefully\n", caughtSignal)
+		pm3.Stop(caughtSignal)
+	}()
+
+	if err := tui.Run(); err != nil {
+		log.Fatal(err)
+	}
+
 	<-pm3.exitChannel
 	log.Println("All done, bye bye!")
 }
