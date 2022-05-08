@@ -43,6 +43,7 @@ func main() {
 	processes := setupProcesses(tui)
 
 	processList := tview.NewList().ShowSecondaryText(false)
+	processList.SetTitle("Processes")
 
 	for _, process := range processes {
 		processList.AddItem(process.cfg.Name, "", 0, func() {})
@@ -59,8 +60,6 @@ func main() {
 	}()
 
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
-		currIndex := processList.GetCurrentItem()
-		processList.SetTitle(fmt.Sprintf("%s-%d", processName, currIndex))
 		logPages.Clear()
 		logPages.AddItem(processes[i].textView, 0, 1, true)
 	})
@@ -78,6 +77,7 @@ func main() {
 
 	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
+			pm3.shuttingDown = true
 			pm3.Stop(syscall.SIGTERM)
 		}
 		return event
@@ -92,11 +92,15 @@ func main() {
 	}()
 
 	go func() {
-		<-pm3.exitChannel
-		tui.Stop()
+		if err := tui.Run(); err != nil {
+			panic(err)
+		}
+		// TODO: Hitting Ctrl+c exits out of tview, see if we can override that behavior somehow
+		// pm3.Stop(syscall.SIGTERM)
 	}()
 
-	if err := tui.Run(); err != nil {
-		panic(err)
-	}
+	fmt.Println("Waiting for things to end...")
+	<-pm3.exitChannel
+	tui.Stop()
+	fmt.Println("Bye Bye!")
 }
