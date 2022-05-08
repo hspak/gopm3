@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,11 +15,11 @@ import (
 func setupProcesses(tui *tview.Application) []*Process {
 	configFile, err := os.Open("./config.json")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	config, err := io.ReadAll(configFile)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	var cfgs []ProcessConfig
 	json.Unmarshal(config, &cfgs)
@@ -35,6 +34,10 @@ func setupProcesses(tui *tview.Application) []*Process {
 func main() {
 	tui := tview.NewApplication()
 	tui.EnableMouse(true)
+	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	pmLogPane := tview.NewFlex()
+	pmLogPane.SetBorder(true)
+	pmLogPane.SetTitle("gopm3 logs")
 	logPages := tview.NewFlex()
 	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr)")
 	processes := setupProcesses(tui)
@@ -47,23 +50,34 @@ func main() {
 
 	processList.SetBorder(true).SetTitle(processes[0].cfg.Name)
 	flex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
-	tui.SetRoot(flex, true)
+	rootFlex.AddItem(flex, 0, 4, true).AddItem(pmLogPane, 0, 1, false)
+	tui.SetRoot(rootFlex, true)
 
-	pm3 := NewProcessManager(processes)
+	pm3 := NewProcessManager(processes, tui, pmLogPane)
 	go func() {
 		pm3.Start()
 	}()
 
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
-		processList.SetTitle(fmt.Sprintf("%s-%d", processName, len(processes)))
+		currIndex := processList.GetCurrentItem()
+		processList.SetTitle(fmt.Sprintf("%s-%d", processName, currIndex))
 		logPages.Clear()
 		logPages.AddItem(processes[i].textView, 0, 1, true)
 	})
 	logPages.AddItem(processes[0].textView, 0, 1, true)
 
+	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case ' ':
+			index := processList.GetCurrentItem()
+			pm3.Log("Restarting process '%s'\n", pm3.processes[index].cfg.Name)
+			pm3.RestartProcess(index)
+		}
+		return event
+	})
+
 	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
-			tui.Stop()
 			pm3.Stop(syscall.SIGTERM)
 		}
 		return event
@@ -73,14 +87,16 @@ func main() {
 		unixSignals := make(chan os.Signal, 1)
 		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
 		caughtSignal := <-unixSignals
-		log.Printf("Caught signal: %s -- exiting gracefully\n", caughtSignal)
+		pm3.Log("Caught signal: %s -- exiting gracefully\n", caughtSignal)
 		pm3.Stop(caughtSignal)
 	}()
 
-	if err := tui.Run(); err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		<-pm3.exitChannel
+		tui.Stop()
+	}()
 
-	<-pm3.exitChannel
-	log.Println("All done, bye bye!")
+	if err := tui.Run(); err != nil {
+		panic(err)
+	}
 }

@@ -7,14 +7,19 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/rivo/tview"
 )
 
 type ProcessManager struct {
-	processes   []*Process
-	runningCmds []*exec.Cmd
-	exitChannel chan bool
+	processes      []*Process
+	runningCmds    []*exec.Cmd
+	restartRequest []bool
+	exitChannel    chan bool
+	wg             sync.WaitGroup
+	mu             sync.Mutex
+	logs           *tview.TextView
 }
 
 type Process struct {
@@ -54,50 +59,86 @@ func NewProcess(processConfig ProcessConfig, tui *tview.Application) *Process {
 	}
 }
 
-func NewProcessManager(processes []*Process) *ProcessManager {
+func NewProcessManager(processes []*Process, tui *tview.Application, pane *tview.Flex) *ProcessManager {
+	logs := tview.NewTextView().
+		SetRegions(true).
+		SetDynamicColors(true).
+		SetChangedFunc(func() {
+			tui.Draw()
+		})
+	pane.AddItem(logs, 0, 1, false)
 	return &ProcessManager{
-		processes:   processes,
-		exitChannel: make(chan bool),
+		processes:      processes,
+		restartRequest: make([]bool, 4),
+		runningCmds:    make([]*exec.Cmd, 4),
+		exitChannel:    make(chan bool),
+		logs:           logs,
+	}
+}
+
+func (pm3 *ProcessManager) Log(format string, v ...any) {
+	fmt.Fprintf(pm3.logs, format, v...)
+}
+
+func (pm3 *ProcessManager) setupCmd(process *Process, index int) *exec.Cmd {
+	pm3.Log("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
+	cmd := exec.Command(process.cfg.Command, process.cfg.Args)
+	pm3.runningCmds[index] = cmd
+	writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
+	cmd.Stdout = writer
+	cmd.Stderr = writer
+	return cmd
+}
+
+func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
+	defer pm3.wg.Done()
+	cmd := pm3.setupCmd(process, index)
+	err := cmd.Run()
+	if err != nil {
+		pm3.processes[index].logFile.Write([]byte(err.Error()))
+	}
+	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
+	if pm3.restartRequest[index] {
+		pm3.mu.Lock()
+		pm3.restartRequest[index] = false
+		pm3.mu.Unlock()
+		pm3.wg.Add(1)
+		pm3.Log("Restarting process '%s'\n", process.cfg.Name)
+		pm3.processes[index].textView.Write([]byte("====================================================\n"))
+		pm3.processes[index].textView.Write([]byte("==================== Restarting ====================\n"))
+		pm3.processes[index].textView.Write([]byte("====================================================\n"))
+		pm3.RunProcess(process, index)
 	}
 }
 
 func (pm3 *ProcessManager) Start() {
-	var wg sync.WaitGroup
-	for _, process := range pm3.processes {
-		wg.Add(1)
-		go func(process *Process) {
-			defer wg.Done()
-			log.Printf("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
-			cmd := exec.Command(process.cfg.Command, process.cfg.Args)
-			pm3.runningCmds = append(pm3.runningCmds, cmd)
-			writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
-			cmd.Stdout = writer
-			cmd.Stderr = writer
-
-			// TODO: Add some way to restart
-			if err := cmd.Run(); err != nil {
-				log.Printf("Process '%s' has exited: %s", process.cfg.Name, err)
-				return
-			}
-		}(process)
+	for i, process := range pm3.processes {
+		pm3.wg.Add(1)
+		go pm3.RunProcess(process, i)
 	}
-	wg.Wait()
-	log.Println("No more subprocesses are running!")
-	log.Println("Closing all log files")
+	pm3.wg.Wait()
+	pm3.Log("No more subprocesses are running!")
 	for _, process := range pm3.processes {
 		if err := process.logFile.Close(); err != nil {
-			log.Printf("Log file for '%s' failed to be closed properly: %s", process.cfg.Name, err)
+			pm3.Log("Log file for '%s' failed to be closed properly: %s", process.cfg.Name, err)
 		}
 	}
 	pm3.exitChannel <- true
 }
 
 func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
-	log.Printf("Sending signal '%s' to all processes\n", caughtSignal)
+	pm3.Log("Sending signal '%s' to all processes\n", caughtSignal)
 	for _, cmd := range pm3.runningCmds {
 		if err := cmd.Process.Signal(caughtSignal); err != nil {
-			log.Print(err)
+			pm3.Log(err.Error())
 		}
 	}
 	// TODO: SIGKILL with timeout
+}
+
+func (pm3 *ProcessManager) RestartProcess(index int) {
+	pm3.runningCmds[index].Process.Signal(syscall.SIGTERM)
+	pm3.mu.Lock()
+	pm3.restartRequest[index] = true
+	pm3.mu.Unlock()
 }
