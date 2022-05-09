@@ -34,37 +34,44 @@ func setupProcesses(tui *tview.Application) []*Process {
 func main() {
 	tui := tview.NewApplication()
 	tui.EnableMouse(true)
-	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	pmLogPane := tview.NewFlex()
-	pmLogPane.SetBorder(true)
-	pmLogPane.SetTitle("gopm3 logs")
+
+	// Top boxes
 	logPages := tview.NewFlex()
 	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr)")
-	processes := setupProcesses(tui)
-
 	processList := tview.NewList().ShowSecondaryText(false)
 	processList.SetTitle("Processes")
+	topFlex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
 
+	// Bottom boxes
+	bottomFlex := tview.NewFlex()
+	bottomFlex.SetBorder(true)
+	bottomFlex.SetTitle("gopm3 logs")
+
+	// Merge all the things!
+	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	rootFlex.AddItem(topFlex, 0, 4, true).AddItem(bottomFlex, 0, 1, false)
+	tui.SetRoot(rootFlex, true)
+
+	// Config parsing
+	processes := setupProcesses(tui)
 	for _, process := range processes {
 		processList.AddItem(process.cfg.Name, "", 0, func() {})
 	}
 
-	processList.SetBorder(true).SetTitle(processes[0].cfg.Name)
-	flex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
-	rootFlex.AddItem(flex, 0, 4, true).AddItem(pmLogPane, 0, 1, false)
-	tui.SetRoot(rootFlex, true)
-
-	pm3 := NewProcessManager(processes, tui, pmLogPane)
+	// Main entrypoint
+	pm3 := NewProcessManager(processes, tui, bottomFlex)
 	go func() {
 		pm3.Start()
 	}()
 
+	// Swap log views based on highlighted process list
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
 		logPages.Clear()
 		logPages.AddItem(processes[i].textView, 0, 1, true)
 	})
 	logPages.AddItem(processes[0].textView, 0, 1, true)
 
+	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case ' ':
@@ -78,6 +85,7 @@ func main() {
 		return event
 	})
 
+	// Kill with both ESC or Ctrl+c
 	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
 			pm3.shuttingDown = true
