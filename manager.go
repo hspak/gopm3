@@ -14,14 +14,15 @@ import (
 )
 
 type ProcessManager struct {
-	processes    []*Process
-	runningCmds  []*exec.Cmd
-	exitChannel  chan bool
-	wg           sync.WaitGroup
-	mu           sync.Mutex
-	logs         *tview.TextView
-	logFile      *os.File
-	shuttingDown bool
+	processes      []*Process
+	runningCmds    []*exec.Cmd
+	exitChannel    chan bool
+	wg             sync.WaitGroup
+	mu             sync.Mutex
+	logs           *tview.TextView
+	logFile        *os.File
+	shuttingDown   bool
+	tuiProcessList *tview.List
 }
 
 type Process struct {
@@ -39,7 +40,7 @@ type ProcessConfig struct {
 	NoProcessGroup bool   `json:"use_process_group,omitempty"`
 }
 
-func NewProcess(processConfig ProcessConfig, tui *tview.Application) *Process {
+func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process {
 	homeDir := os.Getenv("HOME")
 	logDir := fmt.Sprintf("%s/.gopm3", homeDir)
 	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
@@ -50,20 +51,15 @@ func NewProcess(processConfig ProcessConfig, tui *tview.Application) *Process {
 	if err != nil {
 		log.Fatal(err)
 	}
-	textView := tview.NewTextView().
-		SetRegions(true).
-		SetDynamicColors(true).
-		SetChangedFunc(func() {
-			tui.Draw()
-		})
+
 	return &Process{
 		cfg:      processConfig,
 		logFile:  logFile,
-		textView: textView,
+		textView: logsPane,
 	}
 }
 
-func NewProcessManager(processes []*Process, tui *tview.Application, pane *tview.Flex) *ProcessManager {
+func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List) *ProcessManager {
 	homeDir := os.Getenv("HOME")
 	logDir := fmt.Sprintf("%s/.gopm3", homeDir)
 	logFileName := fmt.Sprintf("%s/%s.log", logDir, "gopm3")
@@ -71,20 +67,15 @@ func NewProcessManager(processes []*Process, tui *tview.Application, pane *tview
 	if err != nil {
 		log.Fatal(err)
 	}
-	logs := tview.NewTextView().
-		SetRegions(true).
-		SetDynamicColors(true).
-		SetChangedFunc(func() {
-			tui.Draw()
-		})
-	pane.AddItem(logs, 0, 1, false)
+
 	return &ProcessManager{
-		processes:    processes,
-		runningCmds:  make([]*exec.Cmd, 4),
-		exitChannel:  make(chan bool),
-		logs:         logs,
-		logFile:      logFile,
-		shuttingDown: false,
+		processes:      processes,
+		runningCmds:    make([]*exec.Cmd, 4),
+		exitChannel:    make(chan bool),
+		logs:           logsPane,
+		logFile:        logFile,
+		shuttingDown:   false,
+		tuiProcessList: processList,
 	}
 }
 
@@ -110,11 +101,14 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	cmd := setupCmd(process, index)
 	pm3.runningCmds[index] = cmd
 	pm3.Log("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		pm3.processes[index].logFile.Write([]byte(err.Error()))
 	}
-	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
 
+	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
+	cmd.Wait()
+
+	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
 	if !pm3.shuttingDown {
 		if pm3.processes[index].manualRestart {
 			pm3.mu.Lock()
@@ -130,6 +124,7 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 		pm3.wg.Add(1)
 		pm3.RunProcess(process, index)
 	}
+	pm3.tuiProcessList.SetItemText(index, "--- dead ---", "")
 }
 
 func (pm3 *ProcessManager) Start() {

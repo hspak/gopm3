@@ -25,7 +25,13 @@ func setupProcesses(tui *tview.Application) []*Process {
 	json.Unmarshal(config, &cfgs)
 	var processes []*Process
 	for _, cfg := range cfgs {
-		process := NewProcess(cfg, tui)
+		processLogsPane := tview.NewTextView().
+			SetRegions(true).
+			SetDynamicColors(true).
+			SetChangedFunc(func() {
+				tui.Draw()
+			})
+		process := NewProcess(cfg, processLogsPane)
 		processes = append(processes, process)
 	}
 	return processes
@@ -37,8 +43,9 @@ func main() {
 
 	// Top boxes
 	logPages := tview.NewFlex()
-	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr)")
+	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr) (also available in ~/.gopm3/)")
 	processList := tview.NewList().ShowSecondaryText(false)
+	processList.SetBorder(true)
 	processList.SetTitle("Processes")
 	topFlex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
 
@@ -59,7 +66,14 @@ func main() {
 	}
 
 	// Main entrypoint
-	pm3 := NewProcessManager(processes, tui, bottomFlex)
+	pmLogs := tview.NewTextView().
+		SetRegions(true).
+		SetDynamicColors(true).
+		SetChangedFunc(func() {
+			tui.Draw()
+		})
+	bottomFlex.AddItem(pmLogs, 0, 1, false)
+	pm3 := NewProcessManager(processes, pmLogs, processList)
 	go func() {
 		pm3.Start()
 	}()
@@ -76,6 +90,7 @@ func main() {
 		switch event.Rune() {
 		case ' ':
 			index := processList.GetCurrentItem()
+			processList.SetItemText(index, "--- restarting ---", "")
 			pm3.Log("Restarting process '%s'\n", pm3.processes[index].cfg.Name)
 			pm3.mu.Lock()
 			pm3.processes[index].manualRestart = true
