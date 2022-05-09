@@ -11,7 +11,7 @@ Config Format
     {
         "name": "some name",       // The label to reference the command by
         "command": "ls",           // The command to run
-        "args": ["-a", "-b"],       // The arguments to pass to the command
+        "args": ["-a", "-b"],      // The arguments to pass to the command
         "restart_delay": 1000,     // The delay (in milliseconds) before each restarts
         "no_process_group": false, // (Optional) Controls whether gopm3 should kill the child processes of the command as well
     },
