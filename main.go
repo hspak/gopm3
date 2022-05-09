@@ -70,6 +70,9 @@ func main() {
 		case ' ':
 			index := processList.GetCurrentItem()
 			pm3.Log("Restarting process '%s'\n", pm3.processes[index].cfg.Name)
+			pm3.mu.Lock()
+			pm3.processes[index].manualRestart = true
+			pm3.mu.Unlock()
 			pm3.RestartProcess(index)
 		}
 		return event
@@ -95,8 +98,6 @@ func main() {
 		if err := tui.Run(); err != nil {
 			panic(err)
 		}
-		// TODO: Hitting Ctrl+c exits out of tview, see if we can override that behavior somehow
-		// pm3.Stop(syscall.SIGTERM)
 	}()
 
 	fmt.Println("Waiting for things to end...")
