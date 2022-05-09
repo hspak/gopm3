@@ -33,11 +33,11 @@ type Process struct {
 }
 
 type ProcessConfig struct {
-	Name           string `json:"name"`
-	Command        string `json:"command"`
-	Args           string `json:"args"`
-	RestartDelay   int    `json:"restart_delay"`
-	NoProcessGroup bool   `json:"use_process_group,omitempty"`
+	Name           string   `json:"name"`
+	Command        string   `json:"command"`
+	Args           []string `json:"args"`
+	RestartDelay   int      `json:"restart_delay"`
+	NoProcessGroup bool     `json:"use_process_group,omitempty"`
 }
 
 func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process {
@@ -59,7 +59,7 @@ func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process 
 	}
 }
 
-func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List) *ProcessManager {
+func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List, processCount int) *ProcessManager {
 	homeDir := os.Getenv("HOME")
 	logDir := fmt.Sprintf("%s/.gopm3", homeDir)
 	logFileName := fmt.Sprintf("%s/%s.log", logDir, "gopm3")
@@ -70,7 +70,7 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 
 	return &ProcessManager{
 		processes:      processes,
-		runningCmds:    make([]*exec.Cmd, 4),
+		runningCmds:    make([]*exec.Cmd, processCount),
 		exitChannel:    make(chan bool),
 		logs:           logsPane,
 		logFile:        logFile,
@@ -80,14 +80,11 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 }
 
 func setupCmd(process *Process, index int) *exec.Cmd {
-	cmd := exec.Command(process.cfg.Command, process.cfg.Args)
+	cmd := exec.Command(process.cfg.Command, process.cfg.Args...)
 	writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
 	cmd.Stdout = writer
 	cmd.Stderr = writer
-
-	if !process.cfg.NoProcessGroup {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
 }
 
@@ -105,6 +102,7 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 		pm3.processes[index].logFile.Write([]byte(err.Error()))
 	}
 
+	pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
 	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
 	cmd.Wait()
 
@@ -124,6 +122,10 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 		pm3.wg.Add(1)
 		pm3.RunProcess(process, index)
 	}
+
+	// Doing this for good measure -- I've found some orphaned processes still slip through
+	// for those that are supposed to agree to properly handling their own child processes.
+	syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
 	pm3.tuiProcessList.SetItemText(index, "--- dead ---", "")
 }
 

@@ -13,9 +13,10 @@ import (
 )
 
 func setupProcesses(tui *tview.Application) []*Process {
-	configFile, err := os.Open("./config.json")
+	configFile, err := os.Open("./gopm3.config.json")
 	if err != nil {
-		panic(err)
+		fmt.Println("Missing config file: ./gopm3.config.json")
+		os.Exit(1)
 	}
 	config, err := io.ReadAll(configFile)
 	if err != nil {
@@ -73,7 +74,7 @@ func main() {
 			tui.Draw()
 		})
 	bottomFlex.AddItem(pmLogs, 0, 1, false)
-	pm3 := NewProcessManager(processes, pmLogs, processList)
+	pm3 := NewProcessManager(processes, pmLogs, processList, len(processes))
 	go func() {
 		pm3.Start()
 	}()
