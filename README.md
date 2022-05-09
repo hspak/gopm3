@@ -2,7 +2,7 @@
 Dumb Process Manager
 
 ## Config
-Currently hardcoded to look for a JSON file, `gopm3.config.json` in the same
+Currently hardcoded to look for a JSON file, `gopm3.config.json` in the current
 directory.
 
 Config Format
