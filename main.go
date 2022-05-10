@@ -28,6 +28,7 @@ func setupProcesses(tui *tview.Application) []*Process {
 	for _, cfg := range cfgs {
 		processLogsPane := tview.NewTextView().
 			SetRegions(true).
+			SetScrollable(true).
 			SetDynamicColors(true).
 			SetChangedFunc(func() {
 				tui.Draw()
@@ -40,7 +41,8 @@ func setupProcesses(tui *tview.Application) []*Process {
 
 func main() {
 	tui := tview.NewApplication()
-	tui.EnableMouse(true)
+	mouseState := true
+	tui.EnableMouse(mouseState)
 
 	// Top boxes
 	logPages := tview.NewFlex()
@@ -70,6 +72,7 @@ func main() {
 	pmLogs := tview.NewTextView().
 		SetRegions(true).
 		SetDynamicColors(true).
+		SetScrollable(true).
 		SetChangedFunc(func() {
 			tui.Draw()
 		})
@@ -78,6 +81,15 @@ func main() {
 	go func() {
 		pm3.Start()
 	}()
+
+	rootFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'm' {
+			mouseState = !mouseState
+			tui.EnableMouse(mouseState)
+			pm3.Log("Mouse State: %v\n", mouseState)
+		}
+		return event
+	})
 
 	// Swap log views based on highlighted process list
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
@@ -88,8 +100,7 @@ func main() {
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case ' ':
+		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
 			index := processList.GetCurrentItem()
 			processList.SetItemText(index, "--- restarting ---", "")
 			pm3.Log("Restarting process '%s'\n", pm3.processes[index].cfg.Name)
@@ -97,6 +108,24 @@ func main() {
 			pm3.processes[index].manualRestart = true
 			pm3.mu.Unlock()
 			pm3.RestartProcess(index)
+		} else if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
+			tui.SetFocus(logPages.GetItem(0))
+			pm3.Log("Count %d\n", logPages.GetItemCount())
+			return nil
+		} else if event.Key() == tcell.KeyRight || event.Rune() == 'l' {
+			tui.SetFocus(logPages.GetItem(0))
+			return nil
+		}
+		return event
+	})
+
+	logPages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
+			tui.SetFocus(processList)
+			return nil
+		} else if event.Key() == tcell.KeyRight || event.Rune() == 'l' {
+			tui.SetFocus(processList)
+			return nil
 		}
 		return event
 	})
