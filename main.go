@@ -12,6 +12,10 @@ import (
 	"github.com/rivo/tview"
 )
 
+var (
+	Version = "dev"
+)
+
 func setupProcesses(tui *tview.Application) []*Process {
 	configFile, err := os.Open("./gopm3.config.json")
 	if err != nil {
@@ -39,7 +43,34 @@ func setupProcesses(tui *tview.Application) []*Process {
 	return processes
 }
 
+func usage() {
+	fmt.Println("usage: gopm3 [-h/--help/-v/--version]")
+}
+
+func argv() {
+	if len(os.Args) == 1 {
+		return
+	}
+
+	if len(os.Args) > 2 {
+		usage()
+		os.Exit(1)
+	}
+
+	arg := os.Args[1]
+	if arg == "-h" || arg == "--help" {
+		usage()
+		os.Exit(0)
+	}
+	if arg == "-v" || arg == "--version" {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+}
+
 func main() {
+	argv()
+
 	tui := tview.NewApplication()
 	mouseState := true
 	tui.EnableMouse(mouseState)

@@ -1,3 +1,6 @@
 gopm3
-config.json
+gopm3.config.json
 Makefile
+
+npm/bin
+package-lock.json
