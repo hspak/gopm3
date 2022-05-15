@@ -46,4 +46,6 @@ EOF
 
 git tag "v${VERSION}" -f
 git push --follow-tags
-npm publish --access public npm
+pushd npm
+npm publish --access public .
+popd

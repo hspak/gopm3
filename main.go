@@ -16,8 +16,8 @@ var (
 	Version = "dev"
 )
 
-func setupProcesses(tui *tview.Application) []*Process {
-	configFile, err := os.Open("./gopm3.config.json")
+func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
+	configFile, err := os.Open(cfgPath)
 	if err != nil {
 		fmt.Println("Missing config file: ./gopm3.config.json")
 		os.Exit(1)
@@ -44,15 +44,20 @@ func setupProcesses(tui *tview.Application) []*Process {
 }
 
 func usage() {
-	fmt.Println("usage: gopm3 [-h/--help/-v/--version]")
+	fmt.Println(`usage: gopm3
+
+  -h/--help:    show this
+  -v/--version: show version
+  -c/--config:  pass explicit config path (otherwise assumes config exists in the same directory)`)
 }
 
-func argv() {
+func argv() string {
+	// Assume implicit config path
 	if len(os.Args) == 1 {
-		return
+		return "./gopm3.config.json"
 	}
 
-	if len(os.Args) > 2 {
+	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
 	}
@@ -66,10 +71,25 @@ func argv() {
 		fmt.Println(Version)
 		os.Exit(0)
 	}
+	if arg == "-v" || arg == "--version" {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+	if arg == "-c" || arg == "--config" {
+		if len(os.Args) != 3 {
+			usage()
+			os.Exit(1)
+		}
+		return os.Args[2]
+	}
+
+	usage()
+	os.Exit(1)
+	return "unreachable :)"
 }
 
 func main() {
-	argv()
+	cfgPath := argv()
 
 	tui := tview.NewApplication()
 	mouseState := true
@@ -94,7 +114,7 @@ func main() {
 	tui.SetRoot(rootFlex, true)
 
 	// Config parsing
-	processes := setupProcesses(tui)
+	processes := setupProcesses(cfgPath, tui)
 	for _, process := range processes {
 		processList.AddItem(process.cfg.Name, "", 0, func() {})
 	}
