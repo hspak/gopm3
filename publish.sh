@@ -47,7 +47,8 @@ EOF
 git add npm/package.json
 git commit -m 'New version'
 git tag "v${VERSION}" -f
-git push --follow-tags
+git push
+git push --tags
 pushd npm
 npm publish --access public .
 popd
