@@ -26,5 +26,6 @@ Config Format
 - Arrow keys to navigate between processes
 - Mouse clicks to focus the different panes
 - `<Space>` to restart highlighted process
+- `m` to toggle mouse mode (default: on, text is only highlightable in non-mouse mode)
 - `ESC` or `Ctrl + c` to exit
 - All logs (both stdout/stderr) are replicated to `~/.gopm3/<process-name>.log`
