@@ -1,13 +1,13 @@
 {
   "name": "@hspak/gopm3",
-  "version": "0.9.1",
+  "version": "0.9.3",
   "description": "A dumb process manager",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "postinstall": "node install.js"
   },
   "bin": {
-    "gopm3": "./bin/gopm3"
+    "gopm3": "src/index.js"
   },
   "repository": {
     "type": "git",

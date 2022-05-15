@@ -24,14 +24,11 @@ if (!(process.platform in GOOS_MAP)) {
 
 const arch = GOARCH_MAP[process.arch];
 const platform = GOOS_MAP[process.platform];
-const installTarget = `gopm3-${platform}-${arch}`;
-
-const { readFileSync } = require('fs');
-const packageJson = JSON.parse(readFileSync('./package.json'));
+const installTarget = `gen-gopm3-${platform}-${arch}`;
 
 // "Install"
-const { exec } = require("child_process");
-exec(`cp bin/${installTarget} ${packageJson.bin.gopm3}`, (err) => {
+const { exec } = require('child_process');
+exec(`cp bin/${installTarget} bin/gopm3-binary`, (err) => {
   if (err) {
     console.error(err);
     process.exit(1);
@@ -39,7 +36,7 @@ exec(`cp bin/${installTarget} ${packageJson.bin.gopm3}`, (err) => {
 });
 
 // Clean up the rest
-exec(`rm -f bin/gopm3-*`, (err) => {
+exec(`rm -f bin/gen-*`, (err) => {
   if (err) {
     console.error(err);
     process.exit(1);
