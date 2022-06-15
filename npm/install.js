@@ -35,10 +35,11 @@ exec(`cp bin/${installTarget} bin/gopm3-binary`, (err) => {
   }
 });
 
+// TODO: This causes flakes in re-installs
 // Clean up the rest
-exec(`rm -f bin/gen-*`, (err) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-});
+// exec(`rm -f bin/gen-*`, (err) => {
+//   if (err) {
+//     console.error(err);
+//     process.exit(1);
+//   }
+// });
