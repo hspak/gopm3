@@ -16,7 +16,11 @@ rm -rf npm/bin/*
 for goos in $GOOS_LIST; do
   for goarch in $GOARCH_LIST; do
     CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -ldflags="-s -w -X main.Version=$VERSION" -o "npm/bin/gen-gopm3-${goos}-${goarch}"
-    upx "npm/bin/gen-gopm3-${goos}-${goarch}"
+
+    # There appears to be issues with macOS and upx compressed binaries.
+    if [[ "$goos" != "darwin" ]]; then
+      upx "npm/bin/gen-gopm3-${goos}-${goarch}"
+    fi
   done
 done
 
