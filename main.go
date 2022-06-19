@@ -97,16 +97,16 @@ func main() {
 
 	// Top boxes
 	logPages := tview.NewFlex()
-	logPages.SetBorder(true).SetTitle("Logs (merged stdout/stderr) (also available in ~/.gopm3/)")
+	logPages.SetBorder(true).SetTitle("  Logs (merged stdout/stderr) (also available in ~/.gopm3/)  ")
 	processList := tview.NewList().ShowSecondaryText(false)
 	processList.SetBorder(true)
-	processList.SetTitle("Processes")
+	processList.SetTitle("  Processes  ")
 	topFlex := tview.NewFlex().AddItem(processList, 0, 1, true).AddItem(logPages, 0, 4, false)
 
 	// Bottom boxes
 	bottomFlex := tview.NewFlex()
 	bottomFlex.SetBorder(true)
-	bottomFlex.SetTitle("gopm3 logs")
+	bottomFlex.SetTitle("  gopm3 logs, hotkeys :: [yellow]<space>[white]: restart highlighted process, [yellow]'m'[white]: toggle mouse mode, [yellow]'s'[white]: stop highlighted process, [yellow]'esc'[white]: exit  ")
 
 	// Merge all the things!
 	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
