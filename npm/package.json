@@ -1,6 +1,6 @@
 {
   "name": "@hspak/gopm3",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "A dumb process manager",
   "main": "src/index.js",
   "scripts": {
