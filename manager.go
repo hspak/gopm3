@@ -30,6 +30,10 @@ type Process struct {
 	logFile       *os.File
 	textView      *tview.TextView
 	manualRestart bool
+
+	// Used to block the restarting of a process.
+	// The primary purpose is to enable manaual stop/starts.
+	restartBlock chan bool
 }
 
 type ProcessConfig struct {
@@ -56,6 +60,9 @@ func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process 
 		cfg:      processConfig,
 		logFile:  logFile,
 		textView: logsPane,
+
+		// Buffered channel so that we don't block on send.
+		restartBlock: make(chan bool, 1),
 	}
 }
 
@@ -107,6 +114,10 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	cmd.Wait()
 
 	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
+
+	// This "halts" the process so that we have control over when/if a process is restarted.
+	<-pm3.processes[index].restartBlock
+
 	if !pm3.shuttingDown {
 		if pm3.processes[index].manualRestart {
 			pm3.mu.Lock()
@@ -148,6 +159,9 @@ func (pm3 *ProcessManager) Start() {
 func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 	pm3.Log("Shutting down, sending signal '%s' to all processes\n", caughtSignal)
 	for i, cmd := range pm3.runningCmds {
+		// Ensure processes are not blocked (manually stopped).
+		pm3.processes[i].restartBlock <- true
+
 		if pm3.processes[i].cfg.NoProcessGroup {
 			if err := cmd.Process.Signal(caughtSignal); err != nil {
 				pm3.Log("Error stopping process '%s': ", pm3.processes[i].cfg.Name)
@@ -163,7 +177,7 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 	// TODO: SIGKILL with timeout
 }
 
-func (pm3 *ProcessManager) RestartProcess(index int) {
+func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
 	if pm3.processes[index].cfg.NoProcessGroup {
 		if err := pm3.runningCmds[index].Process.Signal(syscall.SIGTERM); err != nil {
 			pm3.Log("Error stopping process '%s': ", pm3.processes[index].cfg.Name)
@@ -174,5 +188,8 @@ func (pm3 *ProcessManager) RestartProcess(index int) {
 		// TODO: Some error handling for the pgid
 		pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
 		syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
+	}
+	if restart {
+		pm3.processes[index].restartBlock <- true
 	}
 }
