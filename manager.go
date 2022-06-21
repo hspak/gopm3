@@ -13,6 +13,14 @@ import (
 	"github.com/rivo/tview"
 )
 
+type ManualAction int
+
+const (
+	ManualNoop ManualAction = iota
+	ManualRestart
+	ManualStop
+)
+
 type ProcessManager struct {
 	processes      []*Process
 	runningCmds    []*exec.Cmd
@@ -29,7 +37,7 @@ type Process struct {
 	cfg           ProcessConfig
 	logFile       *os.File
 	textView      *tview.TextView
-	manualRestart bool
+	manualAction  ManualAction
 
 	// Used to block the restarting of a process.
 	// The primary purpose is to enable manaual stop/starts.
@@ -104,41 +112,60 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	defer pm3.wg.Done()
 	cmd := setupCmd(process, index)
 	pm3.runningCmds[index] = cmd
+	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
 	pm3.Log("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
 	if err := cmd.Start(); err != nil {
 		pm3.processes[index].logFile.Write([]byte(err.Error()))
 	}
 
-	pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
-	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
-	cmd.Wait()
+	// This value must be an int so we use -1 as an "undefined", invalid state
+	// we can check for.
+	pgid := -1
 
-	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
+	osProcess := pm3.runningCmds[index].Process
+	if osProcess == nil {
+		pm3.Log("Process %s has exited unexpectedly\n", process.cfg.Name)
+	} else {
+		pgid, _ = syscall.Getpgid(osProcess.Pid)
+		cmd.Wait()
+		pm3.Log("Process '%s' has exited\n", process.cfg.Name)
+	}
 
+	processName := pm3.processes[index].cfg.Name
 	if !pm3.shuttingDown {
-		if pm3.processes[index].manualRestart {
+		shuttingDown := false
+		if pm3.processes[index].manualAction == ManualRestart {
+			pm3.mu.Lock()
+			pm3.processes[index].manualAction = ManualNoop
+			pm3.mu.Unlock()
+		} else if pm3.processes[index].manualAction == ManualStop {
 			// This "halts" the process so that we have control over when/if a process is restarted.
-			<-pm3.processes[index].restartBlock
+			// Hack: we use the boolean value to determine whether we're shutting down or not.
+			shuttingDown = <-pm3.processes[index].restartBlock
 
 			pm3.mu.Lock()
-			pm3.processes[index].manualRestart = false
+			pm3.processes[index].manualAction = ManualNoop
 			pm3.mu.Unlock()
 		} else {
+			pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("[yellow](restarting)[white] %s", processName), "")
 			time.Sleep(time.Duration(pm3.processes[index].cfg.RestartDelay) * time.Millisecond)
 		}
-		pm3.Log("Restarting process '%s'\n", process.cfg.Name)
-		pm3.processes[index].textView.Write([]byte("====================================================\n"))
-		pm3.processes[index].textView.Write([]byte("==================== Restarting ====================\n"))
-		pm3.processes[index].textView.Write([]byte("====================================================\n"))
-		pm3.wg.Add(1)
-		pm3.RunProcess(process, index)
+		if !shuttingDown {
+			pm3.Log("Restarting process '%s'\n", process.cfg.Name)
+			pm3.processes[index].textView.Write([]byte("====================================================\n"))
+			pm3.processes[index].textView.Write([]byte("==================== Restarting ====================\n"))
+			pm3.processes[index].textView.Write([]byte("====================================================\n"))
+			pm3.wg.Add(1)
+			pm3.RunProcess(process, index)
+		}
 	}
 
 	// Doing this for good measure -- I've found some orphaned processes still slip through
 	// for those that are supposed to agree to properly handling their own child processes.
-	syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
-	processName := pm3.processes[index].cfg.Name
-	pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("(dead) %s", processName), "")
+	if pgid > 0 {
+		syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
+	}
+	pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("[red](dead)[white] %s", processName), "")
 }
 
 func (pm3 *ProcessManager) Start() {
@@ -171,8 +198,10 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 			}
 		} else {
 			// TODO: Some error handling for the pgid
-			pgid, _ := syscall.Getpgid(cmd.Process.Pid)
-			syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
+			if cmd.Process != nil {
+				pgid, _ := syscall.Getpgid(cmd.Process.Pid)
+				syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
+			}
 		}
 	}
 	// TODO: SIGKILL with timeout
@@ -187,10 +216,12 @@ func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
 		}
 	} else {
 		// TODO: Some error handling for the pgid
-		pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
-		syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
+		if pm3.runningCmds[index].Process != nil {
+			pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
+			syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
+		}
 	}
 	if restart {
-		pm3.processes[index].restartBlock <- true
+		pm3.processes[index].restartBlock <- false
 	}
 }

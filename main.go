@@ -155,15 +155,18 @@ func main() {
 		processName := pm3.processes[index].cfg.Name
 
 		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
-			processList.SetItemText(index, fmt.Sprintf("(restarting) %s", processName), "")
+			processList.SetItemText(index, fmt.Sprintf("[yellow](restarting)[white] %s", processName), "")
 			pm3.Log("Restarting process '%s'\n", processName)
 			pm3.mu.Lock()
-			pm3.processes[index].manualRestart = true
+			pm3.processes[index].manualAction = ManualRestart
 			pm3.mu.Unlock()
 			pm3.StopProcess(index, true)
 		} else if event.Rune() == 's' {
-			processList.SetItemText(index, fmt.Sprintf("(stopped) %s", processName), "")
+			processList.SetItemText(index, fmt.Sprintf("[yellow](stopped)[white] %s", processName), "")
 			pm3.Log("Stopping process '%s'\n", pm3.processes[index].cfg.Name)
+			pm3.mu.Lock()
+			pm3.processes[index].manualAction = ManualStop
+			pm3.mu.Unlock()
 			pm3.StopProcess(index, false)
 			return nil
 		} else if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
