@@ -115,11 +115,11 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 
 	pm3.Log("Process '%s' has exited\n", process.cfg.Name)
 
-	// This "halts" the process so that we have control over when/if a process is restarted.
-	<-pm3.processes[index].restartBlock
-
 	if !pm3.shuttingDown {
 		if pm3.processes[index].manualRestart {
+			// This "halts" the process so that we have control over when/if a process is restarted.
+			<-pm3.processes[index].restartBlock
+
 			pm3.mu.Lock()
 			pm3.processes[index].manualRestart = false
 			pm3.mu.Unlock()
