@@ -137,7 +137,8 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	// Doing this for good measure -- I've found some orphaned processes still slip through
 	// for those that are supposed to agree to properly handling their own child processes.
 	syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
-	pm3.tuiProcessList.SetItemText(index, "--- dead ---", "")
+	processName := pm3.processes[index].cfg.Name
+	pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("(dead) %s", processName), "")
 }
 
 func (pm3 *ProcessManager) Start() {

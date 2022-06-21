@@ -152,16 +152,17 @@ func main() {
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		index := processList.GetCurrentItem()
+		processName := pm3.processes[index].cfg.Name
 
 		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
-			processList.SetItemText(index, "--- restarting ---", "")
-			pm3.Log("Restarting process '%s'\n", pm3.processes[index].cfg.Name)
+			processList.SetItemText(index, fmt.Sprintf("(restarting) %s", processName), "")
+			pm3.Log("Restarting process '%s'\n", processName)
 			pm3.mu.Lock()
 			pm3.processes[index].manualRestart = true
 			pm3.mu.Unlock()
 			pm3.StopProcess(index, true)
 		} else if event.Rune() == 's' {
-			processList.SetItemText(index, "--- stopped ---", "")
+			processList.SetItemText(index, fmt.Sprintf("(stopped) %s", processName), "")
 			pm3.Log("Stopping process '%s'\n", pm3.processes[index].cfg.Name)
 			pm3.StopProcess(index, false)
 			return nil
