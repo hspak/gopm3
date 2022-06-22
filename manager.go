@@ -134,11 +134,7 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	processName := pm3.processes[index].cfg.Name
 	if !pm3.shuttingDown {
 		shuttingDown := false
-		if pm3.processes[index].manualAction == ManualRestart {
-			pm3.mu.Lock()
-			pm3.processes[index].manualAction = ManualNoop
-			pm3.mu.Unlock()
-		} else if pm3.processes[index].manualAction == ManualStop {
+		if pm3.processes[index].manualAction != ManualNoop {
 			// This "halts" the process so that we have control over when/if a process is restarted.
 			// Hack: we use the boolean value to determine whether we're shutting down or not.
 			shuttingDown = <-pm3.processes[index].restartBlock
