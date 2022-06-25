@@ -34,10 +34,10 @@ type ProcessManager struct {
 }
 
 type Process struct {
-	cfg           ProcessConfig
-	logFile       *os.File
-	textView      *tview.TextView
-	manualAction  ManualAction
+	cfg          ProcessConfig
+	logFile      *os.File
+	textView     *tview.TextView
+	manualAction ManualAction
 
 	// Used to block the restarting of a process.
 	// The primary purpose is to enable manaual stop/starts.

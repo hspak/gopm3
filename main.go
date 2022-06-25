@@ -31,8 +31,8 @@ func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
 	var processes []*Process
 	for _, cfg := range cfgs {
 		processLogsPane := tview.NewTextView().
-			SetRegions(true).
 			SetScrollable(true).
+			SetMaxLines(10000).
 			SetDynamicColors(true).
 			SetChangedFunc(func() {
 				tui.Draw()
@@ -97,7 +97,7 @@ func main() {
 
 	// Top boxes
 	logPages := tview.NewFlex()
-	logPages.SetBorder(true).SetTitle("  Logs (merged stdout/stderr) (also available in ~/.gopm3/)  ")
+	logPages.SetBorder(true).SetTitle(" Logs (merged stdout/stderr) (also available in ~/.gopm3/) ")
 	processList := tview.NewList().ShowSecondaryText(false)
 	processList.SetBorder(true)
 	processList.SetTitle("  Processes  ")
@@ -106,7 +106,7 @@ func main() {
 	// Bottom boxes
 	bottomFlex := tview.NewFlex()
 	bottomFlex.SetBorder(true)
-	bottomFlex.SetTitle("  gopm3 logs, hotkeys :: [yellow]<space>[white]: restart highlighted process, [yellow]'m'[white]: toggle mouse mode, [yellow]'s'[white]: stop highlighted process, [yellow]'esc'[white]: exit  ")
+	bottomFlex.SetTitle(" gopm3 logs, hotkeys :: [yellow]<space>[white]: restart process, [yellow]'m'[white]: toggle mouse mode, [yellow]'s'[white]: stop process, [yellow]'esc'[white]: exit ")
 
 	// Merge all the things!
 	rootFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -121,9 +121,9 @@ func main() {
 
 	// Main entrypoint
 	pmLogs := tview.NewTextView().
-		SetRegions(true).
 		SetDynamicColors(true).
 		SetScrollable(true).
+		SetMaxLines(10000).
 		SetChangedFunc(func() {
 			tui.Draw()
 		})
@@ -171,7 +171,6 @@ func main() {
 			return nil
 		} else if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
 			tui.SetFocus(logPages.GetItem(0))
-			pm3.Log("Count %d\n", logPages.GetItemCount())
 			return nil
 		} else if event.Key() == tcell.KeyRight || event.Rune() == 'l' {
 			tui.SetFocus(logPages.GetItem(0))
