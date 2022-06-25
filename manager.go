@@ -144,6 +144,8 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 			pm3.mu.Unlock()
 		} else {
 			pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("[yellow](restarting)[white] %s", processName), "")
+
+			// TODO: Triggering a stop during this period will stop cause 1 more restart.
 			time.Sleep(time.Duration(pm3.processes[index].cfg.RestartDelay) * time.Millisecond)
 		}
 		if !shuttingDown {
