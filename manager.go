@@ -184,6 +184,19 @@ func (pm3 *ProcessManager) Start() {
 
 func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 	pm3.Log("Shutting down, sending signal '%s' to all processes\n", caughtSignal)
+
+	// If a process can't clean up and terminate in 5 seconds, we kill it.
+	go func() {
+		time.Sleep(5 * time.Second)
+		for _, cmd := range pm3.runningCmds {
+			// TODO: Some error handling for the pgid
+			if cmd.Process != nil {
+				pgid, _ := syscall.Getpgid(cmd.Process.Pid)
+				syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
+			}
+		}
+	}()
+
 	for i, cmd := range pm3.runningCmds {
 		// Ensure processes are not blocked (manually stopped).
 		pm3.processes[i].restartBlock <- true
@@ -202,7 +215,6 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 			}
 		}
 	}
-	// TODO: SIGKILL with timeout
 }
 
 func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
