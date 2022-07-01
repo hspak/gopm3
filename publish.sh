@@ -50,7 +50,7 @@ cat << EOF > npm/package.json
 EOF
 
 git add npm/package.json
-git commit -m 'New version'
+git commit -m "Publish version ${VERSION}"
 git tag "v${VERSION}" -f
 git push
 git push --tags
