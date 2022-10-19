@@ -32,7 +32,7 @@ func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
 	for _, cfg := range cfgs {
 		processLogsPane := tview.NewTextView().
 			SetScrollable(true).
-			SetMaxLines(5000).
+			SetMaxLines(2500).
 			SetDynamicColors(true).
 			SetChangedFunc(func() {
 				tui.Draw()
