@@ -96,7 +96,11 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 
 func setupCmd(process *Process, index int) *exec.Cmd {
 	cmd := exec.Command(process.cfg.Command, process.cfg.Args...)
-	writer := io.MultiWriter(process.logFile, process.textView.BatchWriter())
+	batchWriter := process.textView.BatchWriter()
+	defer batchWriter.Close()
+	writer := io.MultiWriter(process.logFile, batchWriter)
+	batchWriter.Clear()
+
 	cmd.Stdout = writer
 	cmd.Stderr = writer
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
