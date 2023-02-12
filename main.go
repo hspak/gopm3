@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var (
-	Version = "dev"
+	Version            = "dev"
+	SigKillGracePeriod = 5 * time.Second
 )
 
 func usage() {
@@ -92,22 +95,17 @@ func main() {
 
 	// Main entrypoint
 	pmLogs := tview.NewTextView().
-		SetDynamicColors(true).
+		SetDynamicColors(false).
 		SetScrollable(true).
-		SetMaxLines(1000)
+		SetMaxLines(1000).
+		SetChangedFunc(func() {
+			tui.Draw()
+		})
 	bottomFlex.AddItem(pmLogs, 0, 1, false)
 	pm3 := NewProcessManager(processes, pmLogs, processList, len(processes))
 	go func() {
 		pm3.Start()
 	}()
-
-	// go func() {
-	// for true {
-	// time.Sleep(30 * time.Millisecond)
-	// tui.Draw()
-	// pm3.Log("Refreshed")
-	// }
-	// }()
 
 	rootFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'm' {
@@ -118,12 +116,22 @@ func main() {
 		return event
 	})
 
+	var focusLock sync.Mutex
+
 	// Swap log views based on highlighted process list
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
 		logPages.Clear()
-		logPages.AddItem(processes[i].textView, 0, 1, true)
+		logPages.AddItem(processes[i].textView, 0, 1, false)
+
+		oldProc := pm3.highlightedProc
+		newProc := i
+		focusLock.Lock()
+		processes[oldProc].hasFocus = false
+		processes[newProc].hasFocus = true
+		focusLock.Unlock()
 	})
-	logPages.AddItem(processes[0].textView, 0, 1, true)
+	logPages.AddItem(processes[0].textView, 0, 1, false)
+	pm3.highlightedProc = 0
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -179,7 +187,7 @@ func main() {
 		unixSignals := make(chan os.Signal, 1)
 		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
 		caughtSignal := <-unixSignals
-		pm3.Log("Caught signal: %s -- exiting gracefully\n", caughtSignal)
+		pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
 		pm3.Stop(caughtSignal)
 	}()
 

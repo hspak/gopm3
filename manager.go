@@ -21,16 +21,18 @@ const (
 	ManualStop
 )
 
+// TODO: all these arrays are loosely coupled by index.
 type ProcessManager struct {
-	processes      []*Process
-	runningCmds    []*exec.Cmd
-	exitChannel    chan bool
-	wg             sync.WaitGroup
-	mu             sync.Mutex
-	logs           *tview.TextView
-	logFile        *os.File
-	shuttingDown   bool
-	tuiProcessList *tview.List
+	processes       []*Process
+	runningCmds     []*exec.Cmd
+	exitChannel     chan bool
+	wg              sync.WaitGroup
+	mu              sync.Mutex
+	logs            *tview.TextView
+	logFile         *os.File
+	shuttingDown    bool
+	tuiProcessList  *tview.List
+	highlightedProc int
 }
 
 type ProcessConfig struct {
@@ -39,28 +41,6 @@ type ProcessConfig struct {
 	Args           []string `json:"args"`
 	RestartDelay   int      `json:"restart_delay"`
 	NoProcessGroup bool     `json:"use_process_group,omitempty"`
-}
-
-func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process {
-	homeDir := os.Getenv("HOME")
-	logDir := fmt.Sprintf("%s/.gopm3", homeDir)
-	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
-		panic(err)
-	}
-	logFileName := fmt.Sprintf("%s/%s.log", logDir, processConfig.Name)
-	logFile, err := os.Create(logFileName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return &Process{
-		cfg:      processConfig,
-		logFile:  logFile,
-		textView: logsPane,
-
-		// Buffered channel so that we don't block on send.
-		restartBlock: make(chan bool, 1),
-	}
 }
 
 func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List, processCount int) *ProcessManager {
@@ -172,17 +152,17 @@ func (pm3 *ProcessManager) Start() {
 }
 
 func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
-	pm3.Log("Shutting down, sending signal '%s' to all processes\n", caughtSignal)
+	pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
 
-	// If a process can't clean up and terminate in 5 seconds, we kill it.
+	// If a process can't clean up and terminate in time, we kill it.
+	// Also, unconditionally call SIGKILL for the entire process group.
+	// If the process has child prcocesses and doesn't clean them up,
+	// gopm3 won't be able to keep track of them either.
 	go func() {
-		time.Sleep(5 * time.Second)
+		time.Sleep(SigKillGracePeriod)
 		for _, cmd := range pm3.runningCmds {
-			// TODO: Some error handling for the pgid
-			if cmd.Process != nil {
-				pgid, _ := syscall.Getpgid(cmd.Process.Pid)
-				syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
-			}
+			pgid, _ := syscall.Getpgid(cmd.Process.Pid)
+			syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
 		}
 	}()
 
