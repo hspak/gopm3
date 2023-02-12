@@ -23,12 +23,6 @@ type Process struct {
 	// Used to block the restarting of a process.
 	// The primary purpose is to enable manaual stop/starts.
 	restartBlock chan bool
-
-	// Throttle the draw comands to the TUI when processes are emitting an
-	// absurd amount of logs.
-	// Similar approach to how tview throttles draw commands on resize:
-	// https://github.com/rivo/tview/commit/f1ffa429183376f336b94d4221586401be6f4c77
-	lastDraw time.Time
 }
 
 func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process {

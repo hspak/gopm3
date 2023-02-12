@@ -13,7 +13,7 @@ import (
 
 var (
 	Version            = "dev"
-	SigKillGracePeriod = 5 * time.Second
+	SigKillGracePeriod = 10 * time.Second
 )
 
 func usage() {
