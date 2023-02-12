@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -116,27 +115,12 @@ func main() {
 		return event
 	})
 
-	var focusLock sync.Mutex
-
 	// Swap log views based on highlighted process list
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
 		logPages.Clear()
 		logPages.AddItem(processes[i].textView, 0, 1, false)
-
-		oldProc := pm3.highlightedProc
-		newProc := i
-		focusLock.Lock()
-		processes[oldProc].hasFocus = false
-		processes[newProc].hasFocus = true
-		pm3.highlightedProc = newProc
-		focusLock.Unlock()
 	})
 	logPages.AddItem(processes[0].textView, 0, 1, false)
-
-	focusLock.Lock()
-	pm3.highlightedProc = 0
-	processes[0].hasFocus = true
-	focusLock.Unlock()
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

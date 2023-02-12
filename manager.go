@@ -23,16 +23,15 @@ const (
 
 // TODO: all these arrays are loosely coupled by index.
 type ProcessManager struct {
-	processes       []*Process
-	runningCmds     []*exec.Cmd
-	exitChannel     chan bool
-	wg              sync.WaitGroup
-	mu              sync.Mutex
-	logs            *tview.TextView
-	logFile         *os.File
-	shuttingDown    bool
-	tuiProcessList  *tview.List
-	highlightedProc int
+	processes      []*Process
+	runningCmds    []*exec.Cmd
+	exitChannel    chan bool
+	wg             sync.WaitGroup
+	mu             sync.Mutex
+	logs           *tview.TextView
+	logFile        *os.File
+	shuttingDown   bool
+	tuiProcessList *tview.List
 }
 
 type ProcessConfig struct {
