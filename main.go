@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,33 +13,6 @@ import (
 var (
 	Version = "dev"
 )
-
-func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
-	configFile, err := os.Open(cfgPath)
-	if err != nil {
-		fmt.Println("Missing config file: ./gopm3.config.json")
-		os.Exit(1)
-	}
-	config, err := io.ReadAll(configFile)
-	if err != nil {
-		panic(err)
-	}
-	var cfgs []ProcessConfig
-	json.Unmarshal(config, &cfgs)
-	var processes []*Process
-	for _, cfg := range cfgs {
-		processLogsPane := tview.NewTextView().
-			SetScrollable(true).
-			SetMaxLines(2500).
-			SetDynamicColors(true).
-			SetChangedFunc(func() {
-				tui.Draw()
-			})
-		process := NewProcess(cfg, processLogsPane)
-		processes = append(processes, process)
-	}
-	return processes
-}
 
 func usage() {
 	fmt.Println(`usage: gopm3
@@ -123,15 +94,20 @@ func main() {
 	pmLogs := tview.NewTextView().
 		SetDynamicColors(true).
 		SetScrollable(true).
-		SetMaxLines(10000).
-		SetChangedFunc(func() {
-			tui.Draw()
-		})
+		SetMaxLines(1000)
 	bottomFlex.AddItem(pmLogs, 0, 1, false)
 	pm3 := NewProcessManager(processes, pmLogs, processList, len(processes))
 	go func() {
 		pm3.Start()
 	}()
+
+	// go func() {
+	// for true {
+	// time.Sleep(30 * time.Millisecond)
+	// tui.Draw()
+	// pm3.Log("Refreshed")
+	// }
+	// }()
 
 	rootFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'm' {

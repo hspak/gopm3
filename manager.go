@@ -33,17 +33,6 @@ type ProcessManager struct {
 	tuiProcessList *tview.List
 }
 
-type Process struct {
-	cfg          ProcessConfig
-	logFile      *os.File
-	textView     *tview.TextView
-	manualAction ManualAction
-
-	// Used to block the restarting of a process.
-	// The primary purpose is to enable manaual stop/starts.
-	restartBlock chan bool
-}
-
 type ProcessConfig struct {
 	Name           string   `json:"name"`
 	Command        string   `json:"command"`
