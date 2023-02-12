@@ -128,10 +128,15 @@ func main() {
 		focusLock.Lock()
 		processes[oldProc].hasFocus = false
 		processes[newProc].hasFocus = true
+		pm3.highlightedProc = newProc
 		focusLock.Unlock()
 	})
 	logPages.AddItem(processes[0].textView, 0, 1, false)
+
+	focusLock.Lock()
 	pm3.highlightedProc = 0
+	processes[0].hasFocus = true
+	focusLock.Unlock()
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

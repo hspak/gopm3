@@ -51,7 +51,7 @@ func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process 
 		// Buffered channel so that we don't block on send.
 		restartBlock: make(chan bool, 1),
 
-		lastDraw: time.Now(),
+		lastDraw: time.Time{},
 	}
 }
 
@@ -76,7 +76,7 @@ func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
 			SetDynamicColors(true).
 			SetChangedFunc(func() {
 				lastTime := processes[i].lastDraw
-				shouldDraw := time.Since(lastTime) > ThrottleWindow
+				shouldDraw := time.Since(lastTime) > ThrottleWindow || lastTime.IsZero()
 				if processes[i].hasFocus && shouldDraw {
 					processes[i].lastDraw = time.Now()
 					tui.Draw()
