@@ -6,12 +6,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"time"
 
 	"github.com/rivo/tview"
 )
-
-const ThrottleWindow = 50 * time.Millisecond
 
 type Process struct {
 	cfg          ProcessConfig
