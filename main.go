@@ -1,47 +1,20 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 var (
-	Version = "dev"
+	Version            = "dev"
+	SigKillGracePeriod = 10 * time.Second
 )
-
-func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
-	configFile, err := os.Open(cfgPath)
-	if err != nil {
-		fmt.Println("Missing config file: ./gopm3.config.json")
-		os.Exit(1)
-	}
-	config, err := io.ReadAll(configFile)
-	if err != nil {
-		panic(err)
-	}
-	var cfgs []ProcessConfig
-	json.Unmarshal(config, &cfgs)
-	var processes []*Process
-	for _, cfg := range cfgs {
-		processLogsPane := tview.NewTextView().
-			SetScrollable(true).
-			SetMaxLines(2500).
-			SetDynamicColors(true).
-			SetChangedFunc(func() {
-				tui.Draw()
-			})
-		process := NewProcess(cfg, processLogsPane)
-		processes = append(processes, process)
-	}
-	return processes
-}
 
 func usage() {
 	fmt.Println(`usage: gopm3
@@ -121,9 +94,9 @@ func main() {
 
 	// Main entrypoint
 	pmLogs := tview.NewTextView().
-		SetDynamicColors(true).
+		SetDynamicColors(false).
 		SetScrollable(true).
-		SetMaxLines(10000).
+		SetMaxLines(1000).
 		SetChangedFunc(func() {
 			tui.Draw()
 		})
@@ -145,9 +118,9 @@ func main() {
 	// Swap log views based on highlighted process list
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
 		logPages.Clear()
-		logPages.AddItem(processes[i].textView, 0, 1, true)
+		logPages.AddItem(processes[i].textView, 0, 1, false)
 	})
-	logPages.AddItem(processes[0].textView, 0, 1, true)
+	logPages.AddItem(processes[0].textView, 0, 1, false)
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -203,7 +176,7 @@ func main() {
 		unixSignals := make(chan os.Signal, 1)
 		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
 		caughtSignal := <-unixSignals
-		pm3.Log("Caught signal: %s -- exiting gracefully\n", caughtSignal)
+		pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
 		pm3.Stop(caughtSignal)
 	}()
 
