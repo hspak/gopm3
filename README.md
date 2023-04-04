@@ -1,19 +1,23 @@
 # gopm3
+
 Dumb Process Manager
 
 ## Config
+
 Currently hardcoded to look for a JSON file, `gopm3.config.json` in the current
 directory.
 
 Config Format
+
 ```json
 [
     {
-        "name": "some name",       // The label to reference the command by
-        "command": "ls",           // The command to run
-        "args": ["-a", "-b"],      // The arguments to pass to the command
-        "restart_delay": 1000,     // The delay (in milliseconds) before each restarts
-        "no_process_group": false, // (Optional) Controls whether gopm3 should kill the child processes of the command as well
+        "name": "some name",        // The label to reference the command by
+        "command": "ls",            // The command to run
+        "args": ["-a", "-b"],       // The arguments to pass to the command
+        "restart_delay": 1000,      // The delay (in milliseconds) before each restarts
+        "no_process_group": false,  // (Optional) Controls whether gopm3 should kill the child processes of the command as well
+        "env": ["MY_VAR"]           // (Optional) Controlls which env vars will be passed from the parent to the child process
     },
     {
         ...
@@ -23,6 +27,7 @@ Config Format
 ```
 
 ## Usage
+
 - Arrow keys to navigate between processes
 - Mouse clicks to focus the different panes
 - `<Space>` to restart highlighted process
