@@ -40,6 +40,7 @@ type ProcessConfig struct {
 	Args           []string `json:"args"`
 	RestartDelay   int      `json:"restart_delay"`
 	NoProcessGroup bool     `json:"use_process_group,omitempty"`
+	Env            []string `json:"env"` // proxies the specific env vars from the parent process to the child process
 }
 
 func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List, processCount int) *ProcessManager {
@@ -68,6 +69,14 @@ func setupCmd(process *Process, index int) *exec.Cmd {
 	cmd.Stdout = writer
 	cmd.Stderr = writer
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// set up the commands env var arguments
+	// default to the current env if no configuration is provided
+	if len(process.cfg.Env) == 0 {
+		cmd.Env = os.Environ()
+	} else {
+		cmd.Env = setupEnvVars(process.cfg.Env)
+	}
 	return cmd
 }
 
@@ -202,4 +211,15 @@ func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
 	if restart {
 		pm3.processes[index].restartBlock <- false
 	}
+}
+
+func setupEnvVars(vars []string) []string {
+	var b []string
+
+	for _, k := range vars {
+		v := fmt.Sprintf("%s=%s ", k, os.Getenv(k))
+		b = append(b, v)
+	}
+
+	return b
 }
