@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 type Process struct {
 	cfg          ProcessConfig
 	logFile      *os.File
+	logBuffer    *bufio.Writer
 	textView     *tview.TextView
 	manualAction ManualAction
 	hasFocus     bool
@@ -61,7 +63,7 @@ func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
 		textView := tview.NewTextView()
 		processLogsPane := textView.
 			SetScrollable(true).
-			SetMaxLines(2500).
+			SetMaxLines(500).
 			SetDynamicColors(true).
 			SetChangedFunc(func() {
 				tui.Draw()

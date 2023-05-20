@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -32,6 +33,7 @@ type ProcessManager struct {
 	logFile        *os.File
 	shuttingDown   bool
 	tuiProcessList *tview.List
+	currentIndex   int
 }
 
 type ProcessConfig struct {
@@ -62,9 +64,10 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 	}
 }
 
-func setupCmd(process *Process, index int) *exec.Cmd {
+func (pm3 *ProcessManager) setupCmd(process *Process, index int) *exec.Cmd {
 	cmd := exec.Command(process.cfg.Command, process.cfg.Args...)
-	writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
+	process.logBuffer = bufio.NewWriterSize(tview.ANSIWriter(process.textView), 1000000)
+	writer := io.MultiWriter(process.logFile, process.logBuffer)
 	cmd.Stdout = writer
 	cmd.Stderr = writer
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -78,7 +81,7 @@ func (pm3 *ProcessManager) Log(format string, v ...any) {
 
 func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	defer pm3.wg.Done()
-	cmd := setupCmd(process, index)
+	cmd := pm3.setupCmd(process, index)
 	pm3.runningCmds[index] = cmd
 	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
 	pm3.Log("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)

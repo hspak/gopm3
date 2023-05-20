@@ -119,8 +119,13 @@ func main() {
 	processList.SetChangedFunc(func(i int, processName, secondary string, hotkey rune) {
 		logPages.Clear()
 		logPages.AddItem(processes[i].textView, 0, 1, false)
+		processes[pm3.currentIndex].hasFocus = false
+		processes[i].hasFocus = true
+		pm3.currentIndex = i
 	})
 	logPages.AddItem(processes[0].textView, 0, 1, false)
+	pm3.currentIndex = 0
+	processes[0].hasFocus = true
 
 	// Support <space> for restarting individual processes
 	processList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -172,12 +177,26 @@ func main() {
 		return event
 	})
 
+
 	go func() {
 		unixSignals := make(chan os.Signal, 1)
 		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
 		caughtSignal := <-unixSignals
 		pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
 		pm3.Stop(caughtSignal)
+	}()
+
+	go func() {
+		for range time.Tick(time.Millisecond * 500) {
+			if (pm3.shuttingDown) {
+				break;
+			}
+			for _, process := range processes {
+				if process.hasFocus {
+					process.logBuffer.Flush()
+				}
+			}
+		}
 	}()
 
 	go func() {
