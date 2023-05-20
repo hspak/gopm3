@@ -32,6 +32,7 @@ type ProcessManager struct {
 	logFile        *os.File
 	shuttingDown   bool
 	tuiProcessList *tview.List
+	disableLogs    bool
 }
 
 type ProcessConfig struct {
@@ -40,6 +41,7 @@ type ProcessConfig struct {
 	Args           []string `json:"args"`
 	RestartDelay   int      `json:"restart_delay"`
 	NoProcessGroup bool     `json:"use_process_group,omitempty"`
+	DisableLogs    bool     `json:"disable_logs,omitempty"`
 }
 
 func NewProcessManager(processes []*Process, logsPane *tview.TextView, processList *tview.List, processCount int) *ProcessManager {
@@ -51,6 +53,11 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 		log.Fatal(err)
 	}
 
+	disableLogs := false
+	if os.Getenv("GOPM3_DISABLE_LOGS") != "" {
+		disableLogs = true
+	}
+
 	return &ProcessManager{
 		processes:      processes,
 		runningCmds:    make([]*exec.Cmd, processCount),
@@ -59,14 +66,21 @@ func NewProcessManager(processes []*Process, logsPane *tview.TextView, processLi
 		logFile:        logFile,
 		shuttingDown:   false,
 		tuiProcessList: processList,
+		disableLogs:    disableLogs,
 	}
 }
 
-func setupCmd(process *Process, index int) *exec.Cmd {
+func (pm3 *ProcessManager) setupCmd(process *Process, index int) *exec.Cmd {
 	cmd := exec.Command(process.cfg.Command, process.cfg.Args...)
-	writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
-	cmd.Stdout = writer
-	cmd.Stderr = writer
+	if (pm3.disableLogs || process.cfg.DisableLogs) {
+		cmd.Stdout = process.logFile
+		cmd.Stderr = process.logFile
+		process.textView.Write([]byte("Logs are disabled, suggest using 'make logs'"))
+	} else {
+		writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
+		cmd.Stdout = writer
+		cmd.Stderr = writer
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
 }
@@ -78,7 +92,7 @@ func (pm3 *ProcessManager) Log(format string, v ...any) {
 
 func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 	defer pm3.wg.Done()
-	cmd := setupCmd(process, index)
+	cmd := pm3.setupCmd(process, index)
 	pm3.runningCmds[index] = cmd
 	pm3.tuiProcessList.SetItemText(index, process.cfg.Name, "")
 	pm3.Log("Starting process %s (%s %s)\n", process.cfg.Name, process.cfg.Command, process.cfg.Args)
