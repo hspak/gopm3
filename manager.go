@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -40,7 +41,7 @@ type ProcessConfig struct {
 	Command        string   `json:"command"`
 	Args           []string `json:"args"`
 	RestartDelay   int      `json:"restart_delay"`
-	NoProcessGroup bool     `json:"use_process_group,omitempty"`
+	UseProcessGroup bool     `json:"use_process_group,omitempty"`
 	DisableLogs    bool     `json:"disable_logs,omitempty"`
 }
 
@@ -85,6 +86,16 @@ func (pm3 *ProcessManager) setupCmd(process *Process, index int) *exec.Cmd {
 	return cmd
 }
 
+func (pm3 *ProcessManager) writePid(execCmd *exec.Cmd, name string) {
+	homeDir := os.Getenv("HOME")
+	gopm3Dir := fmt.Sprintf("%s/.gopm3", homeDir)
+	pidFilename := fmt.Sprintf("%s/%s.pid", gopm3Dir, name)
+	pid := []byte(strconv.Itoa(execCmd.Process.Pid))
+	if err := os.WriteFile(pidFilename, pid, 0644); err != nil {
+		pm3.Log("Failed to write pidFile for %s %s\n", execCmd.Path, execCmd.Args)
+	}
+}
+
 func (pm3 *ProcessManager) Log(format string, v ...any) {
 	writer := io.MultiWriter(pm3.logs, pm3.logFile)
 	fmt.Fprintf(writer, format, v...)
@@ -100,15 +111,13 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 		pm3.processes[index].logFile.Write([]byte(err.Error()))
 	}
 
-	// This value must be an int so we use -1 as an "undefined", invalid state
-	// we can check for.
-	pgid := -1
+	// Write Pid to file, this should be overwritten on restarts.
+	pm3.writePid(pm3.runningCmds[index], process.cfg.Name)
 
 	osProcess := pm3.runningCmds[index].Process
 	if osProcess == nil {
 		pm3.Log("Process %s has exited unexpectedly\n", process.cfg.Name)
 	} else {
-		pgid, _ = syscall.Getpgid(osProcess.Pid)
 		cmd.Wait()
 		pm3.Log("Process '%s' has exited\n", process.cfg.Name)
 	}
@@ -140,11 +149,6 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 		}
 	}
 
-	// Doing this for good measure -- I've found some orphaned processes still slip through
-	// for those that are supposed to agree to properly handling their own child processes.
-	if pgid > 0 {
-		syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
-	}
 	pm3.tuiProcessList.SetItemText(index, fmt.Sprintf("[red](dead)[white] %s", processName), "")
 }
 
@@ -165,7 +169,7 @@ func (pm3 *ProcessManager) Start() {
 }
 
 func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
-	pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
+	pm3.Log("Caught signal: %s, sending SIGTERM to all and waiting %s seconds before SIGKILL\n", caughtSignal, SigKillGracePeriod)
 
 	// If a process can't clean up and terminate in time, we kill it.
 	// Also, unconditionally call SIGKILL for the entire process group.
@@ -174,8 +178,8 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 	go func() {
 		time.Sleep(SigKillGracePeriod)
 		for _, cmd := range pm3.runningCmds {
-			pgid, _ := syscall.Getpgid(cmd.Process.Pid)
-			syscall.Kill(-pgid, syscall.SIGKILL) // note the minus sign
+			pm3.Log("Death to %d\n", cmd.Process.Pid)
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // note the minus sign
 		}
 	}()
 
@@ -183,35 +187,35 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 		// Ensure processes are not blocked (manually stopped).
 		pm3.processes[i].restartBlock <- true
 
-		if pm3.processes[i].cfg.NoProcessGroup {
+		if !pm3.processes[i].cfg.UseProcessGroup {
 			if err := cmd.Process.Signal(caughtSignal); err != nil {
 				pm3.Log("Error stopping process '%s': ", pm3.processes[i].cfg.Name)
 				pm3.Log(err.Error())
 				pm3.Log("\n")
 			}
 		} else {
-			// TODO: Some error handling for the pgid
-			if cmd.Process != nil {
-				pgid, _ := syscall.Getpgid(cmd.Process.Pid)
-				syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
-			}
+			// Unconditionally kill the process group.
+			// It's possible the parent process is gone and orphaned all its children.
+			// Send both signals
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) // note the minus sign
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) // note the minus sign
 		}
 	}
 }
 
 func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
-	if pm3.processes[index].cfg.NoProcessGroup {
+	if !pm3.processes[index].cfg.UseProcessGroup {
 		if err := pm3.runningCmds[index].Process.Signal(syscall.SIGTERM); err != nil {
 			pm3.Log("Error stopping process '%s': ", pm3.processes[index].cfg.Name)
 			pm3.Log(err.Error())
 			pm3.Log("\n")
 		}
 	} else {
-		// TODO: Some error handling for the pgid
-		if pm3.runningCmds[index].Process != nil {
-			pgid, _ := syscall.Getpgid(pm3.runningCmds[index].Process.Pid)
-			syscall.Kill(-pgid, syscall.SIGTERM) // note the minus sign
-		}
+		// Unconditionally kill the process group.
+		// It's possible the parent process is gone and orphaned all its children.
+		// Send both signals
+		syscall.Kill(-pm3.runningCmds[index].Process.Pid, syscall.SIGTERM) // note the minus sign
+		syscall.Kill(-pm3.runningCmds[index].Process.Pid, syscall.SIGINT) // note the minus sign
 	}
 	if restart {
 		pm3.processes[index].restartBlock <- false
