@@ -196,9 +196,7 @@ func (pm3 *ProcessManager) Stop(caughtSignal os.Signal) {
 		} else {
 			// Unconditionally kill the process group.
 			// It's possible the parent process is gone and orphaned all its children.
-			// Send both signals
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM) // note the minus sign
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) // note the minus sign
 		}
 	}
 }
@@ -213,9 +211,7 @@ func (pm3 *ProcessManager) StopProcess(index int, restart bool) {
 	} else {
 		// Unconditionally kill the process group.
 		// It's possible the parent process is gone and orphaned all its children.
-		// Send both signals
 		syscall.Kill(-pm3.runningCmds[index].Process.Pid, syscall.SIGTERM) // note the minus sign
-		syscall.Kill(-pm3.runningCmds[index].Process.Pid, syscall.SIGINT) // note the minus sign
 	}
 	if restart {
 		pm3.processes[index].restartBlock <- false
