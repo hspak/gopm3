@@ -9,8 +9,8 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-GOOS_LIST="linux darwin"
-GOARCH_LIST="amd64 arm64"
+GOOS_LIST="darwin"
+GOARCH_LIST="arm64"
 
 rm -rf npm/bin/*
 for goos in $GOOS_LIST; do
