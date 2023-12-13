@@ -3,12 +3,10 @@
 
 // maps process.arch to GOARCH
 let GOARCH_MAP = {
-  'x64': 'amd64',
   'arm64': 'arm64',
 };
 
 let GOOS_MAP = {
-  'linux': 'linux',
   'darwin': 'darwin',
 };
 
