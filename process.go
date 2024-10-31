@@ -17,9 +17,21 @@ type Process struct {
 	manualAction ManualAction
 	hasFocus     bool
 
+	// Buffered writer for log output
+	bufferedWriter *BufferedWriter
+
 	// Used to block the restarting of a process.
 	// The primary purpose is to enable manaual stop/starts.
 	restartBlock chan bool
+}
+
+func (p *Process) Cleanup() {
+	if p.bufferedWriter != nil {
+		p.bufferedWriter.Close()
+	}
+	if p.logFile != nil {
+		p.logFile.Close()
+	}
 }
 
 func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process {

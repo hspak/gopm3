@@ -78,9 +78,14 @@ func (pm3 *ProcessManager) setupCmd(process *Process, index int) *exec.Cmd {
 		cmd.Stderr = process.logFile
 		process.textView.Write([]byte("Logs are disabled, suggest using 'make logs'"))
 	} else {
-		writer := io.MultiWriter(process.logFile, tview.ANSIWriter(process.textView))
+		// Create buffered writers for both stdout and stderr with ~2KB buffer and 50ms flush delay
+		tviewWriter := NewBufferedWriter(tview.ANSIWriter(process.textView), 2500, 50*time.Millisecond)
+		writer := io.MultiWriter(process.logFile, tviewWriter)
 		cmd.Stdout = writer
 		cmd.Stderr = writer
+
+		// Store the buffered writer to ensure it's closed properly
+		process.bufferedWriter = tviewWriter
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
@@ -160,9 +165,7 @@ func (pm3 *ProcessManager) Start() {
 	pm3.wg.Wait()
 	pm3.Log("No more subprocesses are running!\n")
 	for _, process := range pm3.processes {
-		if err := process.logFile.Close(); err != nil {
-			pm3.Log("Log file for '%s' failed to be closed properly: %s\n", process.cfg.Name, err)
-		}
+		process.Cleanup()
 	}
 	pm3.logFile.Close()
 	pm3.exitChannel <- true
