@@ -20,6 +20,9 @@ type Process struct {
 	// Buffered writer for log output
 	bufferedWriter *BufferedWriter
 
+	// Docker run metadata used for reliable shutdown.
+	dockerCIDFile string
+
 	// Used to block the restarting of a process.
 	// The primary purpose is to enable manaual stop/starts.
 	restartBlock chan bool
@@ -28,6 +31,9 @@ type Process struct {
 func (p *Process) Cleanup() {
 	if p.bufferedWriter != nil {
 		p.bufferedWriter.Close()
+	}
+	if p.dockerCIDFile != "" {
+		_ = os.Remove(p.dockerCIDFile)
 	}
 	if p.logFile != nil {
 		p.logFile.Close()
@@ -56,7 +62,7 @@ func NewProcess(processConfig ProcessConfig, logsPane *tview.TextView) *Process 
 	}
 }
 
-func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
+func setupProcesses(cfgPath string, onChanged func()) []*Process {
 	configFile, err := os.Open(cfgPath)
 	if err != nil {
 		fmt.Println("Missing config file: ./gopm3.config.json")
@@ -75,9 +81,7 @@ func setupProcesses(cfgPath string, tui *tview.Application) []*Process {
 			SetScrollable(true).
 			SetMaxLines(2500).
 			SetDynamicColors(true).
-			SetChangedFunc(func() {
-				tui.Draw()
-			})
+			SetChangedFunc(onChanged)
 		process := NewProcess(cfg, processLogsPane)
 		processes[i] = process
 	}

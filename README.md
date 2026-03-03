@@ -9,11 +9,13 @@ Config Format
 ```json
 [
     {
-        "name": "some name",       // The label to reference the command by
-        "command": "ls",           // The command to run
-        "args": ["-a", "-b"],      // The arguments to pass to the command
-        "restart_delay": 1000,     // The delay (in milliseconds) before each restarts
-        "no_process_group": false, // (Optional) Controls whether gopm3 should kill the child processes of the command as well
+        "name": "some name",            // The label to reference the command by
+        "command": "ls",                // The command to run
+        "args": ["-a", "-b"],           // The arguments to pass to the command
+        "restart_delay": 1000,          // Delay (ms) before each restart
+        "docker_managed": false,        // (Optional) Mark true when this process starts a docker container
+        "use_process_group": true,      // (Optional) Send signals to the command process group
+        "disable_logs": false           // (Optional) Disable TUI log streaming for this process
     },
     {
         ...

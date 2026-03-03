@@ -65,6 +65,8 @@ func main() {
 	cfgPath := argv()
 
 	tui := tview.NewApplication()
+	redrawScheduler := NewRedrawScheduler(tui, 20*time.Millisecond)
+	defer redrawScheduler.Stop()
 	mouseState := true
 	tui.EnableMouse(mouseState)
 
@@ -87,7 +89,7 @@ func main() {
 	tui.SetRoot(rootFlex, true)
 
 	// Config parsing
-	processes := setupProcesses(cfgPath, tui)
+	processes := setupProcesses(cfgPath, redrawScheduler.Request)
 	for _, process := range processes {
 		processList.AddItem(process.cfg.Name, "", 0, func() {})
 	}
@@ -97,14 +99,35 @@ func main() {
 		SetDynamicColors(false).
 		SetScrollable(true).
 		SetMaxLines(1000).
-		SetChangedFunc(func() {
-			tui.Draw()
-		})
+		SetChangedFunc(redrawScheduler.Request)
+	pmLogs.ScrollToEnd()
 	bottomFlex.AddItem(pmLogs, 0, 1, false)
 	pm3 := NewProcessManager(processes, pmLogs, processList, len(processes))
 	go func() {
 		pm3.Start()
 	}()
+
+	for _, process := range processes {
+		process.textView.ScrollToEnd()
+		processLogPane := process.textView
+		processLogPane.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
+				tui.SetFocus(processList)
+				return nil
+			}
+			if event.Key() == tcell.KeyRight || event.Rune() == 'l' {
+				tui.SetFocus(processList)
+				return nil
+			}
+
+			// Ensure paging to the bottom enables sticky follow for streaming logs.
+			if event.Key() == tcell.KeyPgDn || event.Key() == tcell.KeyCtrlF || event.Key() == tcell.KeyEnd ||
+				(event.Key() == tcell.KeyRune && event.Rune() == 'G') {
+				processLogPane.ScrollToEnd()
+			}
+			return event
+		})
+	}
 
 	rootFlex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'm' {
@@ -133,14 +156,14 @@ func main() {
 			pm3.mu.Lock()
 			pm3.processes[index].manualAction = ManualRestart
 			pm3.mu.Unlock()
-			pm3.StopProcess(index, true)
+			go pm3.StopProcess(index, true)
 		} else if event.Rune() == 's' {
-			processList.SetItemText(index, fmt.Sprintf("[yellow](stopped)[white] %s", processName), "")
+			processList.SetItemText(index, fmt.Sprintf("[yellow](stopping)[white] %s", processName), "")
 			pm3.Log("Stopping process '%s'\n", pm3.processes[index].cfg.Name)
 			pm3.mu.Lock()
 			pm3.processes[index].manualAction = ManualStop
 			pm3.mu.Unlock()
-			pm3.StopProcess(index, false)
+			go pm3.StopProcess(index, false)
 			return nil
 		} else if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
 			tui.SetFocus(logPages.GetItem(0))
@@ -152,22 +175,10 @@ func main() {
 		return event
 	})
 
-	logPages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyLeft || event.Rune() == 'h' {
-			tui.SetFocus(processList)
-			return nil
-		} else if event.Key() == tcell.KeyRight || event.Rune() == 'l' {
-			tui.SetFocus(processList)
-			return nil
-		}
-		return event
-	})
-
 	// Kill with both ESC or Ctrl+c
 	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
-			pm3.shuttingDown = true
-			pm3.Stop(syscall.SIGTERM)
+			go pm3.Stop(syscall.SIGTERM)
 		}
 		return event
 	})
@@ -176,7 +187,6 @@ func main() {
 		unixSignals := make(chan os.Signal, 1)
 		signal.Notify(unixSignals, syscall.SIGINT, syscall.SIGTERM)
 		caughtSignal := <-unixSignals
-		pm3.Log("Caught signal: %s sending SIGTERM to all and waiting %d seconds before SIGKILL\n", SigKillGracePeriod, caughtSignal)
 		pm3.Stop(caughtSignal)
 	}()
 
