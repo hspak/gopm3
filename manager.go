@@ -407,7 +407,7 @@ func (pm3 *ProcessManager) RunProcess(process *Process, index int) {
 			// TODO: Triggering a stop during this period will cause one extra restart.
 			time.Sleep(time.Duration(pm3.processes[index].cfg.RestartDelay) * time.Millisecond)
 		}
-		if !shuttingDown {
+		if !shuttingDown && !pm3.isShuttingDown() {
 			pm3.Log("Restarting process '%s'\n", process.cfg.Name)
 			pm3.processes[index].textView.Write([]byte("====================================================\n"))
 			pm3.processes[index].textView.Write([]byte("==================== Restarting ====================\n"))

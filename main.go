@@ -179,6 +179,7 @@ func main() {
 	tui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
 			go pm3.Stop(syscall.SIGTERM)
+			return nil
 		}
 		return event
 	})
